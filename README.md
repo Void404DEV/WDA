@@ -23,9 +23,9 @@ components/
         ├── style.css
         └── notes.md
 ```
-## 🚀 How to Use
-​1. Pick a component variant from its folder and check notes.md for any required dependencies.
-​2. Install dependencies in your target project if needed.
+<h2>🚀 How to Use</h2>
+​1. Pick a component variant from its folder and check notes.md for any required dependencies.<br>
+​2. Install dependencies in your target project if needed.<br>
 ​3. Copy & adapt the component code and usage.tsx into your project paths (@/components/...).
 --- 
 ​<h2>🤖 AI Reference Workflow</h2>
