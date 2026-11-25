@@ -1,361 +1,228 @@
-# Examples
+# Usage Examples
 
-Real-world code examples demonstrating the four principles. Each example shows what LLMs commonly do wrong and how to fix it.
+Practical examples illustrating each rule in `CLAUDE.md`, contrasting common assistant mistakes with cleaner approaches—including reusing and adapting existing library components (`components/`) to build cohesive design patterns while reducing token usage.
 
 ---
 
-## 1. Think Before Coding
+## 1. Clarify Before Building
 
-### Example 1: Hidden Assumptions
+### Example: Ambiguous Feature Scope
 
-**User Request:** "Add a feature to export user data"
+**Request:** "Add a feature to export user records"
 
-**❌ What LLMs Do (Wrong Assumptions)**
+**❌ Common Mistake (Silent Assumptions)**
 
 ```python
-def export_users(format='json'):
-    """Export all users to a file."""
-    users = User.query.all()
-    
-    if format == 'json':
-        with open('users.json', 'w') as f:
-            json.dump([u.to_dict() for u in users], f)
-    elif format == 'csv':
-        with open('users.csv', 'w') as f:
-            writer = csv.DictWriter(f, fieldnames=['id', 'email', 'name'])
+def export_users(fmt="json"):
+    rows = User.query.all()
+    if fmt == "json":
+        with open("users.json", "w") as f:
+            json.dump([r.to_dict() for r in rows], f)
+    elif fmt == "csv":
+        with open("users.csv", "w") as f:
+            writer = csv.DictWriter(f, fieldnames=["id", "email", "name"])
             writer.writeheader()
-            writer.writerows([u.to_dict() for u in users])
-    
-    return f"Exported {len(users)} users"
+            writer.writerows([r.to_dict() for r in rows])
+    return f"Exported {len(rows)} users"
 ```
 
-**Problems:**
-- Assumed it should export ALL users (what about pagination? privacy?)
-- Assumed file location without asking
-- Assumed which fields to include
-- Assumed CSV fieldnames without checking actual data structure
+**Why it falls short:** Picks output format, destination, and fields without confirming privacy rules, pagination, or actual schema.
 
-**✅ What Should Happen (Surface Assumptions)**
+**✅ Better Approach (Surface Assumptions)**
 
-```
-Before implementing, I need to clarify:
+```text
+Before implementing, please clarify:
+1. Scope: Full dataset or filtered subset?
+2. Delivery: Browser download, background job, or API response?
+3. Fields: Which columns are permitted (excluding sensitive data)?
 
-1. **Scope**: Export all users or filtered subset? (privacy implications)
-2. **Format**: You mentioned "export" - did you mean:
-   - Download file in browser?
-   - Background job with email notification?
-   - API endpoint returning data?
-3. **Fields**: Which user fields? (some might be sensitive)
-4. **Volume**: How many users typically? (affects approach)
-
-Simplest approach: Add an API endpoint that returns paginated JSON.
-Would need more info for file-based exports.
-
-What's your preference?
-```
-
-### Example 2: Multiple Interpretations
-
-**User Request:** "Make the search faster"
-
-**❌ What LLMs Do (Pick Silently)**
-
-```python
-# Adds caching, database indexes, and async processing
-# without asking which "faster" matters
-@lru_cache(maxsize=1000)
-async def search(query: str) -> List[Result]:
-    # ... 200 lines of optimization code
-```
-
-**✅ What Should Happen**
-
-```
-"Make the search faster" could mean:
-
-1. **Faster response time** (< 100ms instead of 500ms)
-   - Add database indexes
-   - Cache frequent queries
-   - Estimated effort: 2 hours
-
-2. **Handle more concurrent searches** (throughput)
-   - Add async/await
-   - Connection pooling
-   - Estimated effort: 4 hours
-
-3. **Faster perceived speed** (UX)
-   - Show partial results immediately
-   - Progressive loading
-   - Estimated effort: 3 hours
-
-Current search takes ~500ms for typical queries. 
-Which aspect matters most for your use case?
+Simplest starting point: a paginated API endpoint. Confirm if that fits.
 ```
 
 ---
 
-## 2. Simplicity First
+## 2. Keep It Minimal
 
-### Example 1: Over-abstraction
+### Example: Premature Abstraction
 
-**User Request:** "Add a function to calculate discount"
+**Request:** "Add a discount calculation helper"
 
-**❌ What LLMs Do (Overengineered)**
+**❌ Common Mistake (Over-engineered Setup)**
 
 ```python
 from abc import ABC, abstractmethod
-from enum import Enum
-from typing import Protocol, Union
 from dataclasses import dataclass
 
-class DiscountStrategy(ABC):
+class DiscountRule(ABC):
     @abstractmethod
-    def calculate(self, amount: float) -> float:
-        pass
+    def apply(self, total: float) -> float: ...
 
-class PercentageDiscount(DiscountStrategy):
-    def __init__(self, percentage: float):
-        self.percentage = percentage
-    
-    def calculate(self, amount: float) -> float:
-        return amount * (self.percentage / 100)
-
-class FixedDiscount(DiscountStrategy):
-    def __init__(self, fixed_amount: float):
-        self.fixed_amount = fixed_amount
-    
-    def calculate(self, amount: float) -> float:
-        return min(self.fixed_amount, amount)
+class PercentRule(DiscountRule):
+    def __init__(self, pct: float):
+        self.pct = pct
+    def apply(self, total: float) -> float:
+        return total * (self.pct / 100)
 
 @dataclass
-class DiscountConfig:
-    strategy: DiscountStrategy
-    min_purchase: float = 0.0
-    max_discount: float = float('inf')
-
-class DiscountCalculator:
-    def __init__(self, config: DiscountConfig):
-        self.config = config
-    
-    def apply_discount(self, amount: float) -> float:
-        if amount < self.config.min_purchase:
-            return 0
-        discount = self.config.strategy.calculate(amount)
-        return min(discount, self.config.max_discount)
-
-# Usage requires 30+ lines of setup for a simple calculation
+class DiscountPolicy:
+    rule: DiscountRule
+    floor: float = 0.0
 ```
 
-**✅ What Should Happen (Simple)**
+**Why it falls short:** Heavy class hierarchy for a single straightforward formula.
+
+**✅ Better Approach (Minimal & Direct)**
 
 ```python
-def calculate_discount(amount: float, percent: float) -> float:
-    """Calculate discount amount. percent should be 0-100."""
-    return amount * (percent / 100)
-
-# Usage
-discount = calculate_discount(100.0, 10.0)  # $10 off
+def calc_discount(total: float, percent: float) -> float:
+    return total * (percent / 100)
 ```
-
-**When to add complexity:** Only when you actually need multiple discount types. If that requirement comes later, refactor then.
-
-### Example 2: Speculative Features
-
-**User Request:** "Save user preferences to database"
-
-**❌ What LLMs Do (Unnecessary Features)**
-
-```python
-class PreferenceManager:
-    def __init__(self, db, cache=None, validator=None):
-        self.db = db
-        self.cache = cache or InMemoryCache()
-        self.validator = validator or DefaultValidator()
-    
-    def save(self, user_id: int, prefs: dict, 
-             merge: bool = True, 
-             validate: bool = True,
-             notify: bool = False) -> bool:
-        """Save preferences with optional merging, validation, and notifications."""
-        
-        if validate:
-            errors = self.validator.validate(prefs)
-            if errors:
-                raise ValidationError(errors)
-        
-        existing = self.get(user_id) if merge else {}
-        
-        if merge:
-            existing.update(prefs)
-            prefs = existing
-        
-        self.db.execute(
-            "UPDATE users SET preferences = ? WHERE id = ?",
-            (json.dumps(prefs), user_id)
-        )
-        
-        if self.cache:
-            self.cache.set(f"prefs:{user_id}", prefs)
-        
-        if notify:
-            self.notify_preference_change(user_id, prefs)
-        
-        return True
-    
-    def notify_preference_change(self, user_id: int, prefs: dict):
-        # Another 30 lines for a feature nobody asked for
-        pass
-```
-
-**✅ What Should Happen (Just What Was Asked)**
-
-```python
-def save_preferences(db, user_id: int, preferences: dict):
-    """Save user preferences to database."""
-    db.execute(
-        "UPDATE users SET preferences = ? WHERE id = ?",
-        (json.dumps(preferences), user_id)
-    )
-```
-
-**Add later if needed:** Caching (when performance matters), validation (when bad data appears), merging (when requirement emerges).
 
 ---
 
-## 3. Surgical Changes
+## 3. Reuse and Adapt Local Components First
 
-### Example 1: Drive-by Refactoring
+### Example A: Composing UI From Existing Library Components
 
-**User Request:** "Fix the bug where empty emails crash the validator"
+**Request:** "Add a top navigation bar with a clean button on the pricing page"
 
-**❌ What LLMs Do (Too Much)**
+**❌ Common Mistake (Writing Everything From Scratch & Burning Tokens)**
 
-```diff
-  def validate_user(user_data):
--     # Check email format
--     if not user_data.get('email'):
-+     """Validate user data."""
-+     email = user_data.get('email', '').strip()
-+     
-+     # Validate email
-+     if not email:
-          raise ValueError("Email required")
--     
--     # Basic email validation
--     if '@' not in user_data['email']:
-+     if '@' not in email or '.' not in email.split('@')[1]:
-          raise ValueError("Invalid email")
-      
--     # Check username
--     if not user_data.get('username'):
-+     # Validate username
-+     username = user_data.get('username', '').strip()
-+     if not username:
-          raise ValueError("Username required")
-+     if len(username) < 3:
-+         raise ValueError("Username too short")
-+     if not username.isalnum():
-+         raise ValueError("Username must be alphanumeric")
-      
-      return True
+```tsx
+// Writes a brand-new navbar and custom button with 140 lines of inline styles
+// and new CSS tokens when components/<category>/<variant>/ already has similar pieces
+export function PricingHeader() {
+  return (
+    <header className="flex items-center justify-between px-8 py-4 bg-slate-950 text-white border-b border-slate-800">
+      {/* ...duplicated layout and custom button markup... */}
+    </header>
+  );
+}
 ```
 
-**Problems:**
-- "Improved" email validation beyond the bug fix
-- Added username validation nobody asked for
-- Changed comments
-- Added docstring
+**Why it falls short:** Ignores `components/`, duplicates existing UI patterns, and wastes context/output tokens on boilerplate.
 
-**✅ What Should Happen (Surgical)**
+**✅ Better Approach (Reuse `components/`, Adapt Colors/Props, Check `notes.md`)**
+
+```tsx
+// Reuses existing variants from components/ and adjusts accent colors to fit the page
+import { Component as Navbar } from "@/components/navbar/minimal-navbar/Component";
+import { Component as ActionButton } from "@/components/button/solid-button/Component";
+
+export function PricingHeader() {
+  return (
+    <div className="bg-zinc-950 text-zinc-100">
+      <Navbar className="border-zinc-800"/>
+      <ActionButton className="bg-emerald-500 hover:bg-emerald-400 text-zinc-950"/>
+    </div>
+  );
+}
+```
+
+### Example B: Adapting Styles & Colors Without Rebuilding
+
+**Request:** "Match this card component's accent color and spacing to our warm theme"
+
+**❌ Common Mistake (Rewriting Component & Duplicating CSS From Scratch)**
+
+```tsx
+// Creates a whole new component file and rewrites layout rules instead of adapting
+// the existing variant and checking its notes.md for dependencies/usage
+export function CustomWarmCard() {
+  // 90 lines of redundant markup and styles
+}
+```
+
+**✅ Better Approach (Targeted Color/Style Adaptation + `notes.md` Check)**
+
+```css
+/* Adapt only the color/accent tokens needed for the target design pattern */
+.card-accent {
+  --accent-color: #f59e0b;
+  --accent-hover: #d97706;
+}
+```
+
+```tsx
+// Check components/card/<variant>/notes.md first, then adapt props/styles cleanly
+import { Component as InfoCard } from "@/components/card/clean-card/Component";
+
+export function WarmInfoCard({ title }: { title: string }) {
+  return <InfoCard className="card-accent" title="{title}"/>;
+}
+```
+
+**Why it works:** Reuses existing components and variants, adapts colors and props to form a cohesive design pattern, and keeps token usage minimal.
+
+---
+
+## 4. Make Targeted Edits
+
+### Example: Fixing Empty Input Without Touching Unrelated Code
+
+**Request:** "Fix empty string handling in the email check"
+
+**❌ Common Mistake (Unrequested Refactors & Formatting Churn)**
 
 ```diff
-  def validate_user(user_data):
-      # Check email format
--     if not user_data.get('email'):
-+     email = user_data.get('email', '')
+- def check_email(email):
+-     if not email:
+-         return False
+-     return "@" in email
++ def validate_email_address(email: str) -> bool:
++     """Validate user email address."""
++     cleaned = (email or "").strip()
++     if not cleaned or "@" not in cleaned or "." not in cleaned.split("@")[-1]:
++         raise ValueError("Invalid email")
++     return True
+```
+
+**Why it falls short:** Renames the function, changes return semantics to exceptions, adds docstrings/types, and alters unrelated rules.
+
+**✅ Better Approach (Surgical Change)**
+
+```diff
+  def check_email(email):
+-     if not email:
 +     if not email or not email.strip():
-          raise ValueError("Email required")
-      
-      # Basic email validation
--     if '@' not in user_data['email']:
-+     if '@' not in email:
-          raise ValueError("Invalid email")
-      
-      # Check username
-      if not user_data.get('username'):
-          raise ValueError("Username required")
-      
-      return True
-```
-
-**Only changed:** The specific lines that fix empty email handling.
-
-### Example 2: Style Drift
-
-**User Request:** "Add logging to the upload function"
-
-**❌ What LLMs Do (Reformat Everything)**
-
-```diff
-- def upload_file(file_path, destination):
-+ def upload_file(file_path: str, destination: str) -> bool:
-+     """Upload file to destination with logging."""
-+     logger.info(f"Uploading {file_path} to {destination}")
-+     
-      try:
--         with open(file_path, 'rb') as f:
--             data = f.read()
--         
--         response = requests.post(destination, files={'file': data})
--         
--         if response.status_code == 200:
--             return True
--         else:
--             return False
-+         with open(file_path, "rb") as f:
-+             data = f.read()
-+         response = requests.post(destination, files={"file": data})
-+         success = response.status_code == 200
-+         
-+         if success:
-+             logger.info(f"Upload successful: {file_path}")
-+         else:
-+             logger.error(f"Upload failed: {file_path}, status={response.status_code}")
-+         
-+         return success
-      except Exception as e:
--         print(f"Error: {e}")
-+         logger.exception(f"Upload error for {file_path}: {e}")
           return False
+      return "@" in email
 ```
 
-**Problems:**
-- Changed quote style ('' to "")
-- Added type hints nobody asked for
-- Added docstring
-- Reformatted whitespace
-- Changed boolean return logic
+---
 
-**✅ What Should Happen (Match Existing Style)**
+## 5. Verify Against Clear Goals
 
-```diff
-+ import logging
-+ 
-+ logger = logging.getLogger(__name__)
-+ 
-  def upload_file(file_path, destination):
-+     logger.info(f'Starting upload: {file_path}')
-      try:
-          with open(file_path, 'rb') as f:
-              data = f.read()
-          
-          response = requests.post(destination, files={'file': data})
-          
-          if response.status_code == 200:
-+             logger.info(f'Upload successful: {file_path}')
-              return True
-          else:
-+             logger.error(f'Upload failed: {file_path}, status={response.status_code}')
+### Example: Step-by-Step Plan With Checks
+
+**Request:** "Add request rate limiting to the API"
+
+**❌ Common Mistake (Vague Hand-Waving)**
+
+```text
+I'll add rate limiting and test everything to make sure it works well.
+```
+
+**✅ Better Approach (Concrete Checkpoints)**
+
+```text
+1. Add per-route request counter -> verify: burst past limit returns HTTP 429.
+2. Wire shared store configuration -> verify: counter persists across restarts.
+3. Run existing API suite -> verify: all prior tests pass with no regressions.
+```
+
+---
+
+## Quick Reference
+
+| Rule | Avoid | Prefer |
+|------|-------|--------|
+| Clarify Before Building | Guessing scope, format, or fields | Asking brief, direct questions first |
+| Keep It Minimal | Extra layers for simple logic | Smallest clear implementation |
+| Reuse & Adapt Components | Rebuilding UI from scratch & over-spending tokens | Reusing `components/` and adjusting colors/props |
+| Make Targeted Edits | Rewriting nearby code or style | Editing only lines tied to the task |
+| Verify Against Clear Goals | Vague promises | Explicit steps with pass/fail checks |
+s={response.status_code}')
               return False
       except Exception as e:
 -         print(f"Error: {e}")
